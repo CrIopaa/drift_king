@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Drift King</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: 'Arial Black', sans-serif;
+            background: #0a0a0a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        .game-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            height: 100vh;
+            max-height: 800px;
+            background: #1a1a1a;
+            overflow: hidden;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: #2a2a2a;
+        }
+
+        .hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .stat {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 20px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 107, 107, 0.3);
+        }
+
+        .stat-label {
+            color: #aaa;
+            font-size: 0.7em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stat-value {
+            color: #fff;
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-top: 2px;
+            text-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
+        }
+
+        .control-hint {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.9em;
+            text-align: center;
+            pointer-events: none;
+            z-index: 10;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+
+        .game-over {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.95);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .game-over.show {
+            display: flex;
+        }
+
+        .game-over-content {
+            text-align: center;
+            color: #fff;
+            padding: 40px;
+        }
+
+        .game-over-content h2 {
+            font-size: 3em;
+            margin-bottom: 20px;
+            color: #ff6b6b;
+            text-shadow: 0 0 20px rgba(255, 107, 107, 0.5);
+        }
+
+        .game-over-stats {
+            font-size: 1.2em;
+            margin-bottom: 30px;
+            color: #aaa;
+            line-height: 1.8;
+        }
+
+        .restart-btn {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+            color: #fff;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.2em;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            box-shadow: 0 5px 20px rgba(255, 107, 107, 0.4);
+            transition: transform 0.2s;
+            pointer-events: all;
+        }
+
+        .restart-btn:active {
+            transform: scale(0.95);
+        }
+
+        .speed-indicator {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            height: 8px;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 10px;
+            overflow: hidden;
+            border: 2px solid rgba(255, 107, 107, 0.3);
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .speed-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4ade80, #fbbf24, #ff6b6b);
+            transition: width 0.1s linear;
+            box-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <canvas id="canvas"></canvas>
+        
+        <div class="hud">
+            <div class="stat">
+                <div class="stat-label">Distance</div>
+                <div class="stat-value" id="distance">0m</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Best</div>
+                <div class="stat-value" id="best">0m</div>
+            </div>
+        </div>
+
+        <div class="control-hint" id="hint">
+            HOLD SCREEN TO TURN LEFT<br>
+            RELEASE TO TURN RIGHT
+        </div>
+
+        <div class="speed-indicator">
+            <div class="speed-fill" id="speedBar"></div>
+        </div>
+
+        <div class="game-over" id="gameOver">
+            <div class="game-over-content">
+                <h2>CRASHED!</h2>
+                <div class="game-over-stats">
+                    Distance: <span id="finalDistance">0</span>m<br>
+                    Top Speed: <span id="finalSpeed">0</span> km/h
+                </div>
+                <button class="restart-btn" onclick="restartGame()">RACE AGAIN</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        let width, height;
+        let gameActive = false;
+        let distance = 0;
+        let best = localStorage.getItem('driftBest') || 0;
+        let speed = 0;
+        let maxSpeed = 0;
+
+        // Car properties
+        let car = {
+            x: 0,
+            y: 0,
+            angle: -Math.PI / 2,
+            speed: 0,
+            turnSpeed: 0.08,
+            acceleration: 0.2,
+            maxSpeed: 8,
+            width: 20,
+            height: 30
+        };
+
+        // Track properties
+        let trackSegments = [];
+        let trackWidth = 120;
+        let segmentLength = 20;
+        let cameraY = 0;
+        let turning = false;
+
+        function resizeCanvas() {
+            width = canvas.offsetWidth;
+            height = canvas.offsetHeight;
+            canvas.width = width;
+            canvas.height = height;
+            
+            car.x = width / 2;
+            car.y = height * 0.7;
+        }
+
+        function initGame() {
+            resizeCanvas();
+            gameActive = true;
+            distance = 0;
+            speed = 0;
+            maxSpeed = 0;
+            cameraY = 0;
+            
+            car.x = width / 2;
+            car.y = height * 0.7;
+            car.angle = -Math.PI / 2;
+            car.speed = 3;
+            
+            trackSegments = [];
+            generateInitialTrack();
+            
+            document.getElementById('hint').style.display = 'block';
+            setTimeout(() => {
+                document.getElementById('hint').style.display = 'none';
+            }, 3000);
+        }
+
+        function generateInitialTrack() {
+            let y = 0;
+            let centerX = width / 2;
+            let curvature = 0;
+            
+            for (let i = 0; i < 100; i++) {
+                curvature += (Math.random() - 0.5) * 0.3;
+                curvature *= 0.95;
+                curvature = Math.max(-2, Math.min(2, curvature));
+                
+                centerX += curvature;
+                centerX = Math.max(trackWidth, Math.min(width - trackWidth, centerX));
+                
+                trackSegments.push({
+                    y: y,
+                    centerX: centerX,
+                    curvature: curvature
+                });
+                
+                y += segmentLength;
+            }
+        }
+
+        function updateTrack() {
+            // Remove segments behind camera
+            while (trackSegments.length > 0 && trackSegments[0].y < cameraY - height) {
+                trackSegments.shift();
+            }
+            
+            // Add new segments ahead
+            while (trackSegments.length < 100) {
+                const lastSegment = trackSegments[trackSegments.length - 1];
+                let curvature = lastSegment.curvature;
+                
+                curvature += (Math.random() - 0.5) * 0.4;
+                curvature *= 0.95;
+                curvature = Math.max(-2.5, Math.min(2.5, curvature));
+                
+                let centerX = lastSegment.centerX + curvature;
+                centerX = Math.max(trackWidth, Math.min(width - trackWidth, centerX));
+                
+                trackSegments.push({
+                    y: lastSegment.y + segmentLength,
+                    centerX: centerX,
+                    curvature: curvature
+                });
+            }
+        }
+
+        function drawTrack() {
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(0, 0, width, height);
+            
+            // Draw track segments
+            for (let i = 0; i < trackSegments.length; i++) {
+                const segment = trackSegments[i];
+                const screenY = segment.y - cameraY;
+                
+                if (screenY < -segmentLength || screenY > height + segmentLength) continue;
+                
+                // Track background
+                ctx.fillStyle = '#3a3a3a';
+                ctx.fillRect(
+                    segment.centerX - trackWidth,
+                    screenY,
+                    trackWidth * 2,
+                    segmentLength + 1
+                );
+                
+                // Road lines
+                if (i % 3 === 0) {
+                    ctx.fillStyle = '#5a5a5a';
+                    ctx.fillRect(
+                        segment.centerX - 3,
+                        screenY,
+                        6,
+                        segmentLength / 2
+                    );
+                }
+                
+                // Track edges
+                ctx.fillStyle = '#ff6b6b';
+                ctx.fillRect(segment.centerX - trackWidth - 4, screenY, 4, segmentLength + 1);
+                ctx.fillRect(segment.centerX + trackWidth, screenY, 4, segmentLength + 1);
+            }
+        }
+
+        function updateCar() {
+            // Turn based on input
+            if (turning) {
+                car.angle -= car.turnSpeed;
+            } else {
+                car.angle += car.turnSpeed;
+            }
+            
+            // Accelerate
+            car.speed = Math.min(car.speed + car.acceleration, car.maxSpeed);
+            
+            // Move car
+            car.x += Math.cos(car.angle) * car.speed;
+            car.y += Math.sin(car.angle) * car.speed;
+            
+            // Update camera
+            cameraY = car.y - height * 0.7;
+            
+            // Update distance
+            distance += car.speed * 0.1;
+            
+            // Track max speed
+            const currentSpeed = Math.floor(car.speed * 15);
+            maxSpeed = Math.max(maxSpeed, currentSpeed);
+            speed = currentSpeed;
+            
+            // Update speed bar
+            const speedPercent = (car.speed / car.maxSpeed) * 100;
+            document.getElementById('speedBar').style.width = speedPercent + '%';
+        }
+
+        function checkCollision() {
+            // Find current track segment
+            const currentSegment = trackSegments.find(seg => 
+                Math.abs(seg.y - car.y) < segmentLength
+            );
+            
+            if (!currentSegment) return false;
+            
+            const distFromCenter = Math.abs(car.x - currentSegment.centerX);
+            
+            if (distFromCenter > trackWidth - car.width / 2) {
+                return true;
+            }
+            
+            return false;
+        }
+
+        function drawCar() {
+            ctx.save();
+            ctx.translate(car.x, car.y - cameraY);
+            ctx.rotate(car.angle + Math.PI / 2);
+            
+            // Car shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.fillRect(-car.width / 2 + 2, -car.height / 2 + 2, car.width, car.height);
+            
+            // Car body
+            ctx.fillStyle = '#ff6b6b';
+            ctx.fillRect(-car.width / 2, -car.height / 2, car.width, car.height);
+            
+            // Car highlights
+            ctx.fillStyle = '#ff8787';
+            ctx.fillRect(-car.width / 2, -car.height / 2, car.width / 3, car.height);
+            
+            // Car windows
+            ctx.fillStyle = '#2a2a2a';
+            ctx.fillRect(-car.width / 3, -car.height / 3, car.width * 2 / 3, car.height / 4);
+            
+            ctx.restore();
+        }
+
+        function gameLoop() {
+            if (!gameActive) return;
+            
+            updateTrack();
+            updateCar();
+            
+            if (checkCollision()) {
+                gameOver();
+                return;
+            }
+            
+            drawTrack();
+            drawCar();
+            
+            // Update HUD
+            document.getElementById('distance').textContent = Math.floor(distance) + 'm';
+            
+            requestAnimationFrame(gameLoop);
+        }
+
+        function gameOver() {
+            gameActive = false;
+            
+            if (distance > best) {
+                best = Math.floor(distance);
+                localStorage.setItem('driftBest', best);
+            }
+            
+            document.getElementById('finalDistance').textContent = Math.floor(distance);
+            document.getElementById('finalSpeed').textContent = maxSpeed;
+            document.getElementById('gameOver').classList.add('show');
+        }
+
+        function restartGame() {
+            document.getElementById('gameOver').classList.remove('show');
+            initGame();
+            gameLoop();
+        }
+
+        // Input handling
+        let touchActive = false;
+
+        canvas.addEventListener('mousedown', () => {
+            turning = true;
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            turning = false;
+        });
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            turning = true;
+            touchActive = true;
+        });
+
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            turning = false;
+            touchActive = false;
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === ' ' || e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                turning = true;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.key === ' ' || e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                turning = false;
+            }
+        });
+
+        // Prevent context menu on long press
+        canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
+
+        window.addEventListener('resize', resizeCanvas);
+
+        // Initialize
+        document.getElementById('best').textContent = Math.floor(best) + 'm';
+        initGame();
+        gameLoop();
+    </script>
+</body>
+</html>
